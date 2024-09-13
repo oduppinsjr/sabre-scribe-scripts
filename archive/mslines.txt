@@ -1,0 +1,47 @@
+SUB MSLINES:
+     IF [@CALLING_SCRIPT]="#FILEFINISH" THEN RETURN ENDIF
+     »{CLEAR}*.{ENTER}«
+     READ F=[F] R=1 C=5 ".S*MS10"
+     [MS_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*LF"
+     [LF_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*FF"
+     [FF_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*FJ"
+     [FJ_ERR]=[@SYSTEM_ERROR]
+     IF [MS_ERR]=0 OR [LF_ERR]=0 OR [FF_ERR]=0 OR [FJ_ERR]=0 THEN
+          WINDOW R=10 C=55 H=[@CURRENT_SCRIPT]+[SV]+" | MS-Lines  {"+[MS_ERR]+"."+[LF_ERR]+"."+[FF_ERR]+"."+[FJ_ERR]+"}"
+          ^R
+          **DUPLICATE MS-LINES WILL CAUSE BACK-OFFICE ISSUES**
+                PLEASE DELETE ANY REMARKS THAT NO LONGER 
+                      APPLY TO THIS RESERVATION..
+                REMARK(S) {FF/LF/FJ} TO DELETE: [MSLINE]
+          ENDWINDOW
+          IF [MSLINE]<>"" THEN
+               »{RESET}5[MSLINE]¤{ENTER}«
+               »{CLEAR}*.{ENTER}«
+               READ F=[F] R=1 C=5 ".S*MS10"
+               [MS_ERR]=[@SYSTEM_ERROR]
+               READ F=[F] R=1 C=5 ".S*LF"
+               [LF_ERR]=[@SYSTEM_ERROR]
+               READ F=[F] R=1 C=5 ".S*FF"
+               [FF_ERR]=[@SYSTEM_ERROR]
+               READ F=[F] R=1 C=5 ".S*FJ"
+               [FJ_ERR]=[@SYSTEM_ERROR]
+               IF [MS_ERR]=0 OR [LF_ERR]=0 OR [FF_ERR]=0 OR [FJ_ERR]=0 THEN
+                    WINDOW R=10 C=45 H=[@CURRENT_SCRIPT]+[SV]+" | Additional"
+                    DO YOU HAVE ADDITIONAL MS-LINES TO DELETE? [@YES][@NO]
+                    ENDWINDOW
+                    IF [@BTN_PRSD]=[@YES] THEN
+                        CALL MSLINES
+                    ELSE
+                        RETURN
+                    ENDIF
+               ELSE
+                   RETURN
+               ENDIF
+          ELSE
+               RETURN
+          ENDIF
+     ENDIF
+ENDSUB

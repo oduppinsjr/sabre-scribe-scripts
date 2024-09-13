@@ -1,0 +1,24 @@
+     "&ADD STANDARD SEAT REMARKS"
+          MENU R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | Standard Remarks"
+          "SEAT ASSIGNED AT &AIRPORT CHECK-IN"
+               [RMK]="SEAT ASSIGNED AT AIRPORT CHECK-IN"
+          "SEAT ASSIGNED AT AIRPORT/&ONLINE CHECK-IN"
+               [RMK]="SEAT ASSIGNED AT AIRPORT/ONLINE CHECK-IN"
+          "SEAT ASSIGNED 90 DAYS PRIOR TO &DEPARTURE" 
+               [RMK]="SEAT ASSIGNED 90 DAYS PRIOR TO DEPARTURE"
+          "-"
+          "BACK"
+               CALL SEATS
+               RETURN
+          ENDMENU
+          IF [RMK]<>"" THEN
+               [R]=1
+               »{CLEAR}«
+               WRITE F=[S] R=1 C=1 "*IA"
+               REPEAT
+                    READ F=[S] R=[R] C=1 [SEG]
+                    IF [SEG]="" THEN READ F=[S] R=[R] C=2 [SEG] ENDIF
+                    IF [SEG]<>"" THEN »5¥S[SEG] [RMK]{ENTER}« ENDIF
+                    [R]=[R]+1
+               UNTIL [SEG]="" OR [R]>=20
+          ENDIF

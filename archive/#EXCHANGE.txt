@@ -1,0 +1,1112 @@
+;SCRIPT: #EXCHANGE
+;VERSION: v08.30.16
+;AUTHOR: Anne Garcelon/Odell Duppins
+;DATE: 12/9/15
+;PURPOSE: Assists agents with processing ticket exchanges.
+;**********************************************
+DEFINE [SN=ANY:10:OPT:::SCRIPT NAME]
+DEFINE [SV=ANY:10:OPT::v08.30.16:SCRIPT VERSION]
+
+DEFINE [HPCC=A/N:4:OPT:::HOME PCC]
+DEFINE [BPCC=A/N:4:OPT:::BOOKING PCC]
+DEFINE [ASINE=A/N:2:OPT:::AGEN SINE]
+DEFINE [AREA=A/N:1:OPT:::SABRE AREA]
+DEFINE [PNR=ANY:11:OPT:::PNR PRESENT]
+DEFINE [PROCESS=ANY:20:OPT:::PROCESS]
+
+DEFINE [DSEG=ANY:9:OPT:::DELETE SEGS]
+DEFINE [MSLINE=ANY:9:OPT:::MS LINE]
+DEFINE [ADD_COL=DECIMAL:9:OPT:::ADDITIONAL COLLECTION]
+DEFINE [RESID=DECIMAL:9:OPT:::RESIDUAL]
+DEFINE [ACTG_LINE=NUM:2:OPT::1:ACCOUNTING LINE]
+DEFINE [WNCF=A/N:6:OPT:FILL::SOUTHWEST CONFIRMATION NUMBER]
+DEFINE [AWB=MASK-NNN:3:OPT:::AIRWAY BILL PREFIX]
+DEFINE [OLD_TKT=MASK-NNNNNNNNNN:10:OPT:FILL::ORIGINAL TICKET NUMBER]
+DEFINE [NEW_TKT=MASK-NNNNNNNNNN:10:OPT:FILL::NEW TICKET NUMBER]
+DEFINE [OLD_TKT_AMT=DECIMAL:8:OPT:::ORIGINAL TICKET AMOUNT]
+DEFINE [NEW_TKT_AMT=DECIMAL:8:OPT:::NEW TICKET AMOUNT]
+DEFINE [ADD=DECIMAL:8:OPT:::]
+DEFINE [CONF=A/N:6:OPT:FILL::CONFIRMATION NUMBER]
+DEFINE [COST=DECIMAL:8:OPT:::]
+DEFINE [CC_CODE=ALPHA:2:OPT:FILL::CREDIT CARD CODE]
+DEFINE [CC_NUM=NUM:16:OPT:::CREDIT CARD NUMBER]
+DEFINE [EXCH_FEE=DECIMAL:9:OPT:::EXCHANGE FEE]
+DEFINE [RFD=DECIMAL:9:OPT:::AMOUNT REFUNDED]
+DEFINE [REASON=ANY:30:OPT:::EXCHANGE REASON]
+DEFINE [LNAME=ALPHA:25:OPT:::LAST NAME]
+DEFINE [FNAME=ALPHA:25:OPT:::FIRST NAME]
+DEFINE [TYPE=ANY:30:OPT:::EXCHANGE TYPE]
+DEFINE [SUBJECT=ANY:50:OPT:::SUBJECT LINE]
+DEFINE [DIN#C=ANY:10:OPT:::DIN PNR]
+DEFINE [INV#C=ANY:10:OPT:::INVOICE PNR]
+DEFINE [QUEUE=NUM:3:OPT:::AGENT QUEUE]
+DEFINE [PARTIAL#C=ANY:10:OPT:::PARTIAL VALUE]
+DEFINE [DK=ANY:10:OPT:::CUSTOMER NUMBER]
+
+DEFINE [AC=ANY:2:OPT:::AIRLINE CODE]
+DEFINE [AC#D=ANY:2:OPT:::AIRLINE LIST]
+DEFINE [AIRLINE=ANY:35:OPT:::AIRLINE NAME]
+DEFINE [FOP#D=ANY:25:OPT:::FORM OF PAYMENT LIST]
+
+DEFINE [LINE=NUM:3:OPT:::GDS LINE NUMBER]
+
+DEFINE [DCITY=ALPHA:3:OPT::BWI:DEPARTURE CITY]
+DEFINE [DDATE=DATE:5:OPT:::DEPARTURE DATE]
+
+DEFINE [MS_ERR=NUM:3:OPT:::MS LINE SYSTEM ERROR LEVEL]
+DEFINE [LF_ERR=NUM:3:OPT:::LF LINE SYSTEM ERROR LEVEL]
+DEFINE [FF_ERR=NUM:3:OPT:::FF LINE SYSTEM ERROR LEVEL]
+DEFINE [FJ_ERR=NUM:3:OPT:::FJ LINE SYSTEM ERROR LEVEL]
+
+DEFINE [RECLOC=ALPHA:6:OPT:::RECORD LOCATOR]
+DEFINE [ARRANGER=ALPHA:40:OPT:::TRAVEL ARRANGER]
+DEFINE [REASON2=ANY:30:OPT:::REASON]
+DEFINE [REMARKS=ANY:50:OPT:::AGENT REMARKS]
+DEFINE [REQUEST=ANY:40:OPT:::REQUESTOR]
+DEFINE [CHANGED=ANY:40:OPT:::WHAT WAS CHANGED]
+DEFINE [ERROR=ANY:50:OPT:::EMULATOR ERROR]
+DEFINE [NEXT#D=ANY:10:OPT:::NEXT/BACK TOGGLE]
+
+DEFINE [ANY1=ANY:1:OPT:::ANY 1 CHAR]
+DEFINE [DEL=NUM:4:OPT:::DELETE]
+DEFINE [SEGS=ANY:9:OPT:::PNR SEGMENTS]
+
+DEFINE [E=ANY:9:OPT:::EMULATOR COLON]
+DEFINE [F=ANY:8:OPT:::EMUFIND COLON]
+DEFINE [S=ANY:6:OPT:::SABRE COLON]
+[E]="EMULATOR:"
+[F]="EMUFIND:"
+[S]="SABRE:"
+;**********************************************
+DEFINE [DEBUG=ALPHA:1:OPT:::DEBUG TOGGLE]
+[DEBUG]="N"
+
+;SWITCHES
+[@SWITCHES] = "CLIPALL"
+[@SWITCHES] = "NOSHOWTRUNCATE"
+[@SWITCHES] = "POINTCLICK"
+
+IF [@SYSTEM_UNAVAIL]="YES" THEN 
+     WINDOW R=10 C=30 H="SYSTEM UNAVALIABLE"
+     SABRE SYSTEM UNAVALIABLE!!
+     PLEASE TRY AGAIN LATER..
+     ENDWINDOW
+     EXIT
+ENDIF
+
+EXTERNAL [BPCC],[HPCC],[ASINE],[AREA],[PNR],[DATE],[PROCESS],[AWB],[OLD_TKT],[NEW_TKT],[AC],[NEXT#D]
+WHENEVER [@BTN_PRSD] = [@EXIT] EXIT ENDWHENEVER
+
+WRITE F=[S] R=1 C=1 "*S"
+READ F=[S] R=1 C=1 [BPCC],".",[HPCC],"*A",[ASINE],".",[AREA],"..",[PNR]
+DEFAULT [BPCC]=[BPCC] DEFAULT [HPCC]=[HPCC]
+DEFAULT [ASINE]=[ASINE] DEFAULT [AREA]=[AREA]
+DEFAULT [PNR]=[PNR] DEFAULT [DATE]=[@DATE]
+DEFAULT [NEXT#D]="NEXT|BACK"
+DEFAULT [FOP#D]="CREDIT CARD=CC|CHECK=CK"
+REQUIRE [FOP#D]="CC" FOR [CC_CODE],[CC_NUM]
+
+WRITE F=[S] R=1 C=1 "*P6"
+READ F=[S] R=2 C=28 [RECLOC]
+DEFAULT [RECLOC]=[RECLOC]
+
+WRITE F=[S] R=1 C=1 "*PDK"
+READ F=[S] R=1 C=1 "CUSTOMER NUMBER - ",[DK]
+DEFAULT [DK]=[DK]
+
+WRITE F=[S] R=1 C=1 "*N"
+READ F=[S] R=1 C=1 [ERROR]
+IF [ERROR]<>"NO NAMES" THEN
+     READ F=[S] R=1 C=5 [LNAME],"/",[FNAME]," "
+     DEFAULT [LNAME]=[LNAME] DEFAULT [FNAME]=[FNAME]
+     IF [DEBUG]="Y" THEN
+         WINDOW R=10 C=35 H="DEBUG"
+          LAST NAME: [LNAME]
+         FIRST NAME: [FNAME]
+         ENDWINDOW
+     ENDIF
+ENDIF
+
+IF [PNR]<>"PNR PRESENT" THEN
+     »{CLEAR}«
+     WINDOW R=10 C=30 H=[@CURRENT_SCRIPT]+[SV]+" | PNR REQUIRED"
+     ^R
+     NO PNR IN ACTIVE WORKSPACE!!
+     PLEASE EXIT AND DISPLAY A PNR 
+     PRIOR TO RUNNING SCRIPT..
+     [@EXIT]
+     ENDWINDOW
+     EXIT
+ENDIF
+
+M01_MAIN:    
+     »{FULL}«
+     [NEXT#D]="NEXT"
+     »{CLEAR}*I*HI{ENTER}«
+     MENU R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | CHANGE/EXCHANGE MENU"
+     "*ADD/CHANGE &AIR                              "
+          CALL CHGAIR
+     "*ADD/CHANGE &CAR ONLY"
+          CALL CHGCAR
+     "*ADD/CHANGE &HOTEL ONLY"
+          CALL CHGHTL
+     "-"
+     "E&XIT"
+          EXIT
+     ENDMENU
+
+EXIT
+
+;**********************************************
+
+SUB CHGCAR:
+W01_CHG_CAR:
+     [NEXT#D]="NEXT"
+     REQUIRE [DIN#C]="TRUE" FOR [SEGS]
+     DEFAULT [SUBJECT]="UPDATED ITIN/INVOICE FOR "+[LNAME]+"/"+[FNAME]
+     
+     »{CLEAR}*IC*PAC{ENTER}«
+     
+     WINDOW R=10 C=45 H=[@CURRENT_SCRIPT]+[SV]+" | ADD/CHANGE CAR ONLY"
+     UPD SUBJECT LINE: [SUBJECT]
+        DOCUMENTATION: [REMARKS]
+     
+                     DIN PNR: [DIN#C]    SEGMENTS:[SEGS] 1-3 OR 1/3 
+          QUEUE TO E-INVOICE: [INV#C]                       (optional)
+       
+     [NEXT#D]
+     ENDWINDOW
+     IF [NEXT#D]="BACK" THEN GOTO M01_MAIN ENDIF
+     
+     »{RESET}«
+     IF [SUBJECT]<>"" THEN »5H-T¥SUBJECT-[SUBJECT]{ENTER}« ENDIF
+     IF [REMARKS]<>"" THEN »5H-[REMARKS]{ENTER}« ENDIF
+     »6[ASINE]§ER{ENTER}«
+     IF [DIN#C]="TRUE" THEN »DIN«
+          IF [SEGS]<>"" THEN »¥S[SEGS]« ENDIF
+          »¥R{ENTER}« 
+     ENDIF
+     IF [INV#C]="TRUE" THEN 
+          »QP/246/104{ENTER}«
+          OPEN F="DELAY:2"
+          »{CLEAR}*[RECLOC]{ENTER}«
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB CHGHTL:
+W01_CHG_HTL:
+     [NEXT#D]="NEXT"
+     REQUIRE [DIN#C]="TRUE" FOR [SEGS]
+     DEFAULT [SUBJECT]="UPDATED ITIN/INVOICE FOR "+[LNAME]+"/"+[FNAME]
+     
+     »{CLEAR}*IH*PAC{ENTER}«
+     
+     WINDOW R=10 C=45 H=[@CURRENT_SCRIPT]+[SV]+" | ADD/CHANGE CAR ONLY"
+     UPD SUBJECT LINE: [SUBJECT]
+        DOCUMENTATION: [REMARKS]
+     
+                     DIN PNR: [DIN#C]    SEGMENTS:[SEGS] 1-3 OR 1/3
+          QUEUE TO E-INVOICE: [INV#C]                       (optional)
+       
+     [NEXT#D]
+     ENDWINDOW
+     IF [NEXT#D]="BACK" THEN GOTO M01_MAIN ENDIF
+     
+     »{RESET}«
+     IF [SUBJECT]<>"" THEN »5H-T¥SUBJECT-[SUBJECT]{ENTER}« ENDIF
+     IF [REMARKS]<>"" THEN »5H-[REMARKS]{ENTER}« ENDIF
+     »6[ASINE]§ER{ENTER}«
+     IF [DIN#C]="TRUE" THEN »DIN«
+          IF [SEGS]<>"" THEN »¥S[SEGS]« ENDIF
+          »¥R{ENTER}«
+     ENDIF
+     IF [INV#C]="TRUE" THEN 
+          »QP/246/104{ENTER}«
+          OPEN F="DELAY:2"
+          »{CLEAR}*[RECLOC]{ENTER}«
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB CHGAIR:
+     CALL MSLINES
+M02_CHG_AIR:
+     »AC¤ALL{ENTER}«
+     »{CLEAR}*IA*PAC{ENTER}«
+     IF [AC]="" THEN
+          READ F=[F] R=1 C=1 "HK" IF [@SYSTEM_ERROR]=0 THEN READ F=[E] R=2 C=4 [AC] ENDIF
+          READ F=[F] R=1 C=1 "GK" IF [@SYSTEM_ERROR]=0 THEN READ F=[E] R=2 C=4 [AC] ENDIF
+          READ F=[F] R=1 C=1 "YK" IF [@SYSTEM_ERROR]=0 THEN READ F=[E] R=2 C=4 [AC] ENDIF
+     ENDIF
+     [AC#D]=[AC]
+     MENU R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | ADD/CHANGE AIR"
+     "*&E-TICKET EXCHANGE           "
+          CALL ETKTEXCH
+     "*&SOUTHWEST EXCHANGE"
+          DEFAULT [AWB]="526"
+          CALL WNEXCH
+     "*&NON-ARC EXCHANGE"
+          CALL NONARC
+     "-"
+     "&BACK"
+          GOTO M01_MAIN
+     ENDMENU
+     
+     »{CLEAR}*I*PAC{ENTER}«
+W01_CREDIT:
+     WINDOW R=10 C=40 H=[@CURRENT_SCRIPT]+[SV]+" | Credit Tracking"
+     ARE YOU USING AN EXISTING CREDIT ON FILE? [@YES][@NO]
+     ENDWINDOW
+     
+     IF [@BTN_PRSD]="YES" THEN
+          [PROCESS]="USE"
+          SPAWN #CREDITTRACKING
+          IF [NEXT#D]="BACK" THEN GOTO W01_CREDIT ENDIF
+     ENDIF
+     
+     CALL MISC
+ENDSUB
+
+;**********************************************
+
+SUB ETKTEXCH:
+ 
+W01_ETKT_EXCH:
+     [NEXT#D]="NEXT"
+     »{CLEAR}*PQR{ENTER}«
+     »*PAC{ENTER}«
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | E-TICKET EXCHANGE"
+     ORIGINAL TICKET: [AWB][OLD_TKT]     ORIGINAL AMOUNT: [OLD_TKT_AMT]
+          NEW TICKET:                         NEW AMOUNT: [NEW_TKT_AMT]
+        EXCHANGE FEE: [EXCH_FEE]
+     ACCOUNTING LINE: [ACTG_LINE]
+
+     [NEXT#D]
+     ENDWINDOW
+     
+     IF [NEXT#D]="BACK" THEN GOTO M02_CHG_AIR ENDIF
+     
+     DEFAULT [AWB]=[AWB]
+     DEFAULT [OLD_TKT]=[OLD_TKT]
+     DEFAULT [OLD_TKT_AMT]=[OLD_TKT_AMT]
+     DEFAULT [NEW_TKT_AMT]=[NEW_TKT_AMT]
+     DEFAULT [EXCH_FEE]=[EXCH_FEE]
+     DEFAULT [CC_CODE]=[CC_CODE]
+     DEFAULT [CC_NUM]=[CC_NUM]
+     DEFAULT [ACTG_LINE]=[ACTG_LINE]
+     DEFAULT [ASINE]=[ASINE]
+          
+     IF [AWB]="" OR [OLD_TKT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ORIGINAL TICKET NUMBER
+          ENDWINDOW
+          GOTO W01_ETKT_EXCH
+     ELSEIF [OLD_TKT_AMT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ORIGINAL TICKET AMOUNT
+          ENDWINDOW
+          GOTO W01_ETKT_EXCH
+     ELSEIF [NEW_TKT_AMT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER NEW TICKET AMOUNT
+          ENDWINDOW
+          GOTO W01_ETKT_EXCH
+     ELSEIF [EXCH_FEE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER EXCAHNGE FEE
+          ENDWINDOW
+          GOTO W01_ETKT_EXCH
+     ELSEIF [ACTG_LINE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ACCOUNTING LINE
+          ENDWINDOW
+          GOTO W01_ETKT_EXCH
+     ENDIF
+     
+     [ADD_COL]=[NEW_TKT_AMT]-[OLD_TKT_AMT]+[EXCH_FEE]
+     IF [ADD_COL]<=0 THEN
+          DEFAULT [ADD_COL]=[ADD_COL]
+          REQUIRE 0=1 FOR [ADD_COL]
+          REQUIRE 0=1 FOR [NEW_TKT_AMT]
+          REQUIRE 0=1 FOR [OLD_TKT_AMT]
+          REQUIRE 0=1 FOR [EXCH_FEE]
+          WINDOW R=10 C=60 H="ERROR"
+          ** ADDITIONAL COLLECTION MUST BE GREATER THAN ZERO **
+          
+               [NEW_TKT_AMT] - [OLD_TKT_AMT] + [EXCH_FEE] = [ADD_COL]
+          ^*
+               {NEW TKT}  {OLD TKT}  {EXCH FEE}  {ADD COLL}              
+          ENDWINDOW
+          REQUIRE 1=1 FOR [ADD_COL]
+          REQUIRE 1=1 FOR [NEW_TKT_AMT]
+          REQUIRE 1=1 FOR [OLD_TKT_AMT]
+          REQUIRE 1=1 FOR [EXCH_FEE]
+          GOTO W01_ETKT_EXCH
+     ENDIF
+     CALL MSCLEAN
+     »5.S*MS10[ACTG_LINE]*FF[ADD_COL]*LF[ADD_COL]*FJE{ENTER}«
+     
+     »5¥EXCHANGED FOR ORIGINAL TICKET NUMBER [AWB][OLD_TKT]§«
+     »5¥ORIGINAL TICKET WAS [OLD_TKT_AMT] AND THE NEW TICKET PRICE IS [NEW_TKT_AMT]§«
+     »5¥THE AIRLINE EXCHANGE FEE WAS [EXCH_FEE]§«
+     »5¥THE TOTAL ADD COLLECT WAS [ADD_COL]{ENTER}«
+ENDSUB
+
+;**********************************************
+
+SUB WNEXCH:
+     DEFAULT [AC#D]="SOUTHWEST AIRLINES=WN"
+
+M03_WN:
+     MENU R=10 C=55 H=[@CURRENT_SCRIPT]+[SV]+" | TYPE OF SOUTHWEST EXCHANGE"
+     "*EXCHANGE WITH &ADD COLLECT               "
+          [TYPE]="ADD COLLECT"
+     "*&EVEN EXCHANGE"
+          [TYPE]="EVEN"
+     "*EXCHANGE WITH RESI&DUAL"
+          [TYPE]="RESIDUAL"
+     "*EXCHANGE WITH RE&FUND"
+          [TYPE]="REFUND"
+     "-"
+     "BACK"
+          GOTO M02_CHG_AIR
+     ENDMENU
+     
+     IF [TYPE]="ADD COLLECT" THEN 
+
+W01_WN_ADDCOLL:
+          CALL FOP
+          [NEXT#D]="NEXT"
+          »*.*P5H{ENTER}«
+          WINDOW R=5 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | SOUTHWEST ("+[TYPE]+")"
+                  AIRLINE: [AC#D]   CONFIRMATION: [WNCF]
+          ORIGINAL TICKET: [AWB][OLD_TKT]     ORIGINAL AMOUNT: [OLD_TKT_AMT]
+               NEW TICKET: [AWB][NEW_TKT]          NEW AMOUNT: [NEW_TKT_AMT]
+             EXCHANGE FEE: [EXCH_FEE]
+          FORM OF PAYMENT: [FOP#D] [CC_CODE][CC_NUM]
+          ACCOUNTING LINE: [ACTG_LINE]
+                   
+          [NEXT#D]    
+          ENDWINDOW
+          
+          IF [NEXT#D]="BACK" THEN GOTO M03_WN ENDIF
+          
+          DEFAULT [WNCF]=[WNCF]
+          DEFAULT [AWB]=[AWB]
+          DEFAULT [OLD_TKT]=[OLD_TKT]
+          DEFAULT [NEW_TKT]=[NEW_TKT]
+          DEFAULT [OLD_TKT_AMT]=[OLD_TKT_AMT]
+          DEFAULT [NEW_TKT_AMT]=[NEW_TKT_AMT]
+          DEFAULT [EXCH_FEE]=[EXCH_FEE]
+          DEFAULT [ACTG_LINE]=[ACTG_LINE]
+          
+          IF [WNCF]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER SOUTHWEST CONFIRMATION
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ELSEIF [AWB]="" OR [OLD_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET NUMBER
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL            
+          ELSEIF [OLD_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET AMOUNT
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ELSEIF [NEW_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET NUMBER
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ELSEIF [NEW_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET AMOUNT
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ELSEIF [EXCH_FEE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER EXCHANGE FEE
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ELSEIF [ACTG_LINE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ACCOUNTING LINE
+               ENDWINDOW
+               GOTO W01_WN_ADDCOLL
+          ENDIF
+          
+          [ADD_COL]=[NEW_TKT_AMT]-[OLD_TKT_AMT]+[EXCH_FEE]
+          IF [ADD_COL]<=0 THEN
+               DEFAULT [ADD_COL]=[ADD_COL]
+               REQUIRE 0=1 FOR [ADD_COL]
+               REQUIRE 0=1 FOR [NEW_TKT_AMT]
+               REQUIRE 0=1 FOR [OLD_TKT_AMT]
+               REQUIRE 0=1 FOR [EXCH_FEE]
+               WINDOW R=10 C=60 H="ERROR"
+               ** ADDITIONAL COLLECTION MUST BE GREATER THAN ZERO **
+	          
+                    [NEW_TKT_AMT] - [OLD_TKT_AMT] + [EXCH_FEE] = [ADD_COL]
+               ^*
+                    {NEW TKT}  {OLD TKT}  {EXCH FEE}  {ADD COLL}              
+               ENDWINDOW
+               REQUIRE 1=1 FOR [ADD_COL]
+               REQUIRE 1=1 FOR [NEW_TKT_AMT]
+               REQUIRE 1=1 FOR [OLD_TKT_AMT]
+               REQUIRE 1=1 FOR [EXCH_FEE]
+               GOTO W01_WN_ADDCOLL
+          ENDIF
+          
+          CALL MSCLEAN
+          »5.S*MS10[ACTG_LINE]*FF[ADD_COL]*LF[ADD_COL]*FJE§«
+          »5.S*MS10[ACTG_LINE]*SBSUP*TT19*VCWNWNWN*CF[NEW_TKT]*EXA{ENTER}«
+          »AC/WN/[NEW_TKT]/0/[ADD_COL]/0.00/ONE/CC[CC_CODE][CC_NUM] 1.1[LNAME] [FNAME]/1/D/E-V-WNWNWN-*SG{ENTER}«
+          
+          »5¥EXCHANGED FOR ORIGINAL TICKET NUMBER [AWB][OLD_TKT]§«
+          »5¥ORIGINAL TICKET WAS [OLD_TKT_AMT] AND THE NEW TICKET PRICE IS [NEW_TKT_AMT]§«
+          »5¥THE AIRLINE EXCHANGE FEE WAS [EXCH_FEE]§«
+          »5¥THE TOTAL ADD COLLECT WAS [ADD_COL]{ENTER}«
+     ELSEIF [TYPE]="EVEN" OR [TYPE]="RESIDUAL" THEN
+          
+W02_WN_EVEN:
+          CALL FOP
+          »*.*P5H{ENTER}«
+          ;DEFAULT [NEW_TKT_AMT]=[OLD_TKT_AMT]
+          [NEXT#D]="NEXT"      
+          WINDOW R=5 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | SOUTHWEST ("+[TYPE]+")"
+                  AIRLINE: [AC#D]   CONFIRMATION: [WNCF]
+          ORIGINAL TICKET: [AWB][OLD_TKT]     ORIGINAL AMOUNT: [OLD_TKT_AMT]
+               NEW TICKET: [AWB][NEW_TKT]          NEW AMOUNT: [NEW_TKT_AMT]
+          FORM OF PAYMENT: [FOP#D] [CC_CODE][CC_NUM]
+          ACCOUNTING LINE: [ACTG_LINE]
+
+          [NEXT#D]
+          ENDWINDOW
+          IF [NEXT#D]="BACK" THEN GOTO M03_WN ENDIF
+          
+          DEFAULT [WNCF]=[WNCF]
+          DEFAULT [AWB]=[AWB]
+          DEFAULT [OLD_TKT]=[OLD_TKT]
+          DEFAULT [NEW_TKT]=[NEW_TKT]
+          DEFAULT [OLD_TKT_AMT]=[OLD_TKT_AMT]
+          DEFAULT [NEW_TKT_AMT]=[NEW_TKT_AMT]
+          DEFAULT [EXCH_FEE]=0.00
+          DEFAULT [ACTG_LINE]=[ACTG_LINE]
+     
+          IF [WNCF]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER SOUTHWEST CONFIRMATION
+               ENDWINDOW
+               GOTO W02_WN_EVEN
+          ELSEIF [AWB]="" OR [OLD_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET NUMBER
+               ENDWINDOW
+               GOTO W02_WN_EVEN             
+          ELSEIF [OLD_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET AMOUNT
+               ENDWINDOW
+               GOTO W02_WN_EVEN
+          ELSEIF [NEW_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET NUMBER
+               ENDWINDOW
+               GOTO W02_WN_EVEN
+          ELSEIF [NEW_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET AMOUNT
+               ENDWINDOW
+               GOTO W02_WN_EVEN
+          ELSEIF [ACTG_LINE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ACCOUNTING LINE
+               ENDWINDOW
+               GOTO W02_WN_EVEN
+          ENDIF
+          
+          IF [TYPE]="EVEN" THEN
+               IF [NEW_TKT_AMT]<>[OLD_TKT_AMT] THEN
+                    WINDOW R=10 C=60 H="ERROR"
+                    TICKET AMOUNTS MUST BE EQUAL FOR EVEN EXCHANGE
+                    ENDWINDOW
+                    GOTO W02_WN_EVEN
+               ENDIF
+          ELSEIF [TYPE]="RESIDUAL" THEN
+               [RESID]=[OLD_TKT_AMT]-([NEW_TKT_AMT]+[EXCH_FEE])
+               IF [RESID]<=0 THEN
+                    DEFAULT [RESID]=[RESID]
+                    REQUIRE 0=1 FOR [RESID]
+                    REQUIRE 0=1 FOR [NEW_TKT_AMT]
+                    REQUIRE 0=1 FOR [OLD_TKT_AMT]
+                    REQUIRE 0=1 FOR [EXCH_FEE]
+                    WINDOW R=10 C=60 H="ERROR"
+                      ** RESIDUAL MUST BE GREATER THAN ZERO **
+		          
+                    [OLD_TKT_AMT] - [NEW_TKT_AMT] + [EXCH_FEE] = [RESID]
+                    ^*
+                    {OLD TKT}  {NEW TKT}  {EXCH FEE}  {RESIDUAL}              
+                    ENDWINDOW
+                    REQUIRE 1=1 FOR [NEW_TKT_AMT]
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT]
+                    GOTO W02_WN_EVEN
+               ENDIF
+          ENDIF
+          
+          CALL MSCLEAN
+          »5.S*MS10[ACTG_LINE]*FF0.00*LF0.00*FJE§«
+          »5.S*MS10[ACTG_LINE]*SBSUP*TT19*VCWNWNWN*CF[NEW_TKT]*EXE{ENTER}«
+          »AC/WN/[NEW_TKT]/0/0.00/0.00/ONE/CC[CC_CODE][CC_NUM] 1.1[LNAME] [FNAME]/1/D/E-V-WNWNWN-*SG{ENTER}«
+          
+          »5¥EXCHANGED FOR ORIGINAL TICKET NUMBER [AWB][OLD_TKT]§«
+          »5¥ORIGINAL TICKET WAS [OLD_TKT_AMT] AND THE NEW TICKET PRICE IS [NEW_TKT_AMT]§«
+          »5¥THE AIRLINE EXCHANGE FEE WAS 0.00§«
+          »5¥THE TOTAL ADD COLLECT WAS 0.00{ENTER}«
+          IF [TYPE]="RESIDUAL" THEN »5¥THE TOTAL RESIDUAL WAS [RESID]{ENTER}« ENDIF
+          
+     ELSEIF [TYPE]="REFUND" THEN
+         
+W04_WN_RFD:
+          CALL FOP
+          [NEXT#D]="NEXT"
+          »*.*P5H{ENTER}«
+          WINDOW R=5 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | SOUTHWEST ("+[TYPE]+")"
+                  AIRLINE: [AC#D]   CONFIRMATION: [WNCF]
+          ORIGINAL TICKET: [AWB][OLD_TKT]     ORIGINAL AMOUNT: [OLD_TKT_AMT]
+               NEW TICKET: [AWB][NEW_TKT]          NEW AMOUNT: [NEW_TKT_AMT]
+             EXCHANGE FEE: [EXCH_FEE]
+          FORM OF PAYMENT: [FOP#D] [CC_CODE][CC_NUM]
+          ACCOUNTING LINE: [ACTG_LINE]
+                   
+          [NEXT#D]
+          ENDWINDOW
+          
+          IF [NEXT#D]="BACK" THEN GOTO M03_WN ENDIF
+          
+          DEFAULT [WNCF]=[WNCF]
+          DEFAULT [AWB]=[AWB]
+          DEFAULT [OLD_TKT]=[OLD_TKT]
+          DEFAULT [NEW_TKT]=[NEW_TKT]
+          DEFAULT [OLD_TKT_AMT]=[OLD_TKT_AMT]
+          DEFAULT [NEW_TKT_AMT]=[NEW_TKT_AMT]
+          DEFAULT [EXCH_FEE]=[EXCH_FEE]
+          DEFAULT [ACTG_LINE]=[ACTG_LINE]
+          
+          IF [WNCF]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER SOUTHWEST CONFIRMATION
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [AWB]="" OR [OLD_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET NUMBER
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [OLD_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ORIGINAL TICKET AMOUNT
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [NEW_TKT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET NUMBER
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [NEW_TKT_AMT]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER NEW TICKET AMOUNT
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [EXCH_FEE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER EXCHANGE FEE
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ELSEIF [ACTG_LINE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER ACCOUNTING LINE
+               ENDWINDOW
+               GOTO W04_WN_RFD
+          ENDIF
+          
+          [ADD_COL]=[NEW_TKT_AMT]-([OLD_TKT_AMT]+[EXCH_FEE])
+          [RESID]=[OLD_TKT_AMT]-([NEW_TKT_AMT]+[EXCH_FEE])
+          [RFD]=[OLD_TKT_AMT]-([NEW_TKT_AMT]+[EXCH_FEE])
+          
+          IF [RFD]<=0 THEN
+               DEFAULT [RFD]=[RFD] 
+               REQUIRE 0=1 FOR [RFD]
+               REQUIRE 0=1 FOR [NEW_TKT_AMT]
+               REQUIRE 0=1 FOR [OLD_TKT_AMT]
+               REQUIRE 0=1 FOR [EXCH_FEE]
+               WINDOW R=10 C=60 H="ERROR"
+                   ** REFUND MUST BE GREATER THAN ZERO **
+                    
+               [OLD_TKT_AMT] - [NEW_TKT_AMT] + [EXCH_FEE] = [RFD]
+               ^*
+               {OLD TKT}  {NEW TKT}  {EXCH FEE}    {REFUND}              
+               ENDWINDOW
+               REQUIRE 1=1 FOR [NEW_TKT_AMT]
+               REQUIRE 1=1 FOR [OLD_TKT_AMT]
+               REQUIRE 1=1 FOR [EXCH_FEE]
+               GOTO W04_WN_RFD
+          ENDIF
+          
+          CALL MSCLEAN
+          »5.S*MS10[ACTG_LINE]*FF0.00*LF0.00*FJE§«
+          »5.S*MS10[ACTG_LINE]*SBSUP*TT19*VCWNWNWN*CF[NEW_TKT]*EXR{ENTER}«
+          ;ac line for even exchange using new ticket
+          »AC/WN/[NEW_TKT]/0/0.00/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_CODE][CC_NUM]« ENDIF
+               »1.1[LNAME] [FNAME]/1/D/E-V-WNWNWN-*SG{ENTER}«
+          IF [TYPE]="REFUND" THEN 
+          ;ac line for refund using old ticket
+          »ACR/WN/[OLD_TKT]/0/[RFD]/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_CODE][CC_NUM]« ENDIF
+               »1.1[LNAME] [FNAME]/1/A/P/D/E-V-WNWNWN{ENTER}«
+          ENDIF
+          »5¥EXCHANGED FOR ORIGINAL TICKET NUMBER [AWB][OLD_TKT]§«
+          »5¥ORIGINAL TICKET WAS [OLD_TKT_AMT] AND THE NEW TICKET PRICE IS [NEW_TKT_AMT]§«
+          »5¥THE AIRLINE EXCHANGE FEE WAS 0.00§«
+          IF [TYPE]="ADD COLLECT" THEN »5¥THE TOTAL ADD COLLECT WAS 0.00§« ENDIF
+          IF [TYPE]="RESIDUAL" THEN »5¥THE TOTAL RESIDUAL WAS [RESID]{ENTER}« ENDIF
+          IF [TYPE]="REFUND" THEN »5¥THE TOTAL REFUND WAS [RFD]{ENTER}« ENDIF
+     ELSE
+          GOTO M03_WN
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB NONARC:
+
+DEFAULT [AC#D]="-Choose One-=XX|" +
+"ALASKA AIRLINES=AS|" +
+"ALLEGIANT AIR=G4|" +
+"FRONTIER AIRLINES=F9|" +
+"HAWAIIAN AIRLINES=HA|" +
+"JET BLUE AIRWAYS=B6|" +
+"SPIRIT AIRLINES=NK|" +
+"SUN COUNTRY AIRLINES=SY|" +
+"VIRGIN AMERICA=VX|"
+             
+W01_NA_EXCH:
+     CALL FOP
+     [NEXT#D]="NEXT"
+     »*IA*HIA{ENTER}«
+     IF [AC]="" THEN
+          READ F=[E] R=5 C=1 [ERROR]
+          IF [ERROR]<>"NO HIST" THEN
+               READ F=[E] R=5 C=4 [AC]
+               IF [AC]<>"" THEN
+                    READ F=[E] R=5 C=12 [DDATE]
+                    READ F=[E] R=5 C=20 [DCITY]
+                    READ F=[E] R=5 C=54 [CONF]
+               ELSE
+                    READ F=[E] R=5 C=6 [AC]
+                    READ F=[E] R=5 C=14 [DDATE]
+                    READ F=[E] R=5 C=20 [DCITY]
+               ENDIF
+          ENDIF
+          DEFAULT [AC]=[AC] DEFAULT [CONF]=[CONF]
+          DEFAULT [DDATE]=[DDATE] DEFAULT [DCITY]=[DCITY]
+          
+          IF [AC]="AS" THEN [AIRLINE]="ALASKA AIRLINES" [AWB]="027"
+          ELSEIF [AC]="G4" THEN [AIRLINE]="ALLEGIANT AIR" [AWB]=""
+          ELSEIF [AC]="AA" THEN [AIRLINE]="AMERICAN AIRLINES" [AWB]="001"
+          ELSEIF [AC]="DL" THEN [AIRLINE]="DELTA AIR LINES" [AWB]="006"
+          ELSEIF [AC]="F9" THEN [AIRLINE]="FRONTIER AIRLINES" [AWB]=""
+          ELSEIF [AC]="HA" THEN [AIRLINE]="HAWAIIAN AIRLINES" [AWB]="173"
+          ELSEIF [AC]="B6" THEN [AIRLINE]="JET BLUE AIRWAYS" [AWB]="279"
+          ELSEIF [AC]="WN" THEN [AIRLINE]="SOUTHWEST AIRLINES" [AWB]="526"
+          ELSEIF [AC]="NK" THEN [AIRLINE]="SPIRIT AIRLINES" [AWB]=""
+          ELSEIF [AC]="SY" THEN [AIRLINE]="SUN COUNTRY AIRLINES" [AWB]="337"
+          ELSEIF [AC]="UA" THEN [AIRLINE]="UNITED AIRLINES" [AWB]="016"
+          ELSEIF [AC]="VX" THEN [AIRLINE]="VIRGIN AMERICA" [AWB]="984"
+          ENDIF
+          DEFAULT [AWB]=[AWB]
+     ELSE
+          [AC#D]=[AC]
+     ENDIF
+     WINDOW R=5 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | NON-ARC EXCHANGE"
+             AIRLINE: [AC#D]  CONFIRMATION: [CONF]
+     ORIGINAL TICKET: [AWB][OLD_TKT]     ORIGINAL AMOUNT: [OLD_TKT_AMT]
+          NEW TICKET:                         NEW AMOUNT: [NEW_TKT_AMT]
+        EXCHANGE FEE: [EXCH_FEE]    
+         CREDIT CARD: [CC_CODE][CC_NUM]
+     ACCOUNTING LINE: [ACTG_LINE]
+            
+     [NEXT#D]
+     ENDWINDOW
+     IF [NEXT#D]="BACK" THEN GOTO M02_CHG_AIR ENDIF
+     
+     DEFAULT [CONF]=[CONF]
+     DEFAULT [AWB]=[AWB]
+     DEFAULT [OLD_TKT]=[OLD_TKT]
+     DEFAULT [OLD_TKT_AMT]=[OLD_TKT_AMT]
+     DEFAULT [NEW_TKT_AMT]=[NEW_TKT_AMT]
+     DEFAULT [EXCH_FEE]=[EXCH_FEE]
+     DEFAULT [ACTG_LINE]=[ACTG_LINE]
+     
+     IF [CONF]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER CONFIRMATION
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [AC]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER AIRLINE CODE
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [AWB]="" OR [OLD_TKT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ORIGINAL TICKET NUMBER
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [OLD_TKT_AMT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ORIGINAL TICKET AMOUNT
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [NEW_TKT_AMT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER NEW TICKET AMOUNT
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [EXCH_FEE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER EXCAHNGE FEE
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ELSEIF [ACTG_LINE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER ACCOUNTING LINE
+          ENDWINDOW
+          GOTO W01_NA_EXCH
+     ENDIF
+     
+     [ADD_COL]=[NEW_TKT_AMT]-[OLD_TKT_AMT]+[EXCH_FEE]
+     IF [ADD_COL]<0 THEN
+          DEFAULT [ADD_COL]=[ADD_COL]
+          REQUIRE 0=1 FOR [ADD_COL]
+          REQUIRE 0=1 FOR [NEW_TKT_AMT]
+          REQUIRE 0=1 FOR [OLD_TKT_AMT]
+          REQUIRE 0=1 FOR [EXCH_FEE]
+          WINDOW R=10 C=60 H="ERROR"
+          ** ADDITIONAL COLLECTION MUST BE GREATER THAN ZERO **
+          
+               [NEW_TKT_AMT] - [OLD_TKT_AMT] + [EXCH_FEE] = [ADD_COL]
+          ^*
+               {NEW TKT}  {OLD TKT}  {EXCH FEE}  {ADD COLL}              
+          ENDWINDOW
+          REQUIRE 1=1 FOR [ADD_COL]
+          REQUIRE 1=1 FOR [NEW_TKT_AMT]
+          REQUIRE 1=1 FOR [OLD_TKT_AMT]
+          REQUIRE 1=1 FOR [EXCH_FEE]
+          GOTO W01_NA_EXCH
+     ENDIF
+     
+     CALL MSCLEAN
+     »/0/0OTH[AC]GK1[DCITY][DDATE]-[AIRLINE] CONFIRMATION-[CONF]{ENTER}«
+     »5.S*MS10[ACTG_LINE]*FF[ADD_COL]*LF[ADD_COL]*FJE{ENTER}«
+     »ACOTH1/[AC][AC][AC]/INV[CONF]/0/[ADD_COL]/0/ONE/CC[CC_CODE][CC_NUM] 1.1[LNAME] [FNAME]/1-I*TT17*SG{ENTER}«
+     
+     »5¥EXCHANGED FOR ORIGINAL TICKET NUMBER [AWB][OLD_TKT]§«
+     »5¥ORIGINAL TICKET WAS [OLD_TKT_AMT] AND THE NEW TICKET PRICE IS [NEW_TKT_AMT]§«
+     »5¥THE AIRLINE EXCHANGE FEE WAS [EXCH_FEE]§«
+     »5¥THE TOTAL ADD COLLECT WAS [ADD_COL]{ENTER}«
+ENDSUB
+
+;**********************************************
+
+SUB MSLINES:
+     IF [@CALLING_SCRIPT]="#FILEFINISH" THEN RETURN ENDIF
+     »{CLEAR}*.{ENTER}«
+     READ F=[F] R=1 C=5 ".S*MS10"
+     [MS_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*LF"
+     [LF_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*FF"
+     [FF_ERR]=[@SYSTEM_ERROR]
+     READ F=[F] R=1 C=5 ".S*FJ"
+     [FJ_ERR]=[@SYSTEM_ERROR]
+     IF [MS_ERR]=0 OR [LF_ERR]=0 OR [FF_ERR]=0 OR [FJ_ERR]=0 THEN
+          WINDOW R=10 C=55 H=[@CURRENT_SCRIPT]+[SV]+" | MS-LINES  "+[MS_ERR]+"."+[LF_ERR]+"."+[FF_ERR]+"."+[FJ_ERR]
+          ^R
+          **DUPLICATE MS-LINES WILL CAUSE BACK-OFFICE ISSUES**
+                PLEASE DELETE ANY REMARKS THAT NO LONGER 
+                      APPLY TO THIS RESERVATION..
+                REMARK(S) {FF/LF/FJ} TO DELETE: [MSLINE]
+          ENDWINDOW
+          IF [MSLINE]<>"" THEN
+               »{RESET}5[MSLINE]¤{ENTER}«
+               WINDOW R=10 C=45 H=[@CURRENT_SCRIPT]+[SV]+" | ADDITIONAL MS LINES"
+               DO YOU HAVE ADDITIONAL MS-LINES TO DELETE? [@YES][@NO]
+               ENDWINDOW
+               IF [@BTN_PRSD]=[@YES] THEN
+                   CALL MSLINES
+               ELSE
+                   RETURN
+               ENDIF
+          ELSE
+               RETURN
+          ENDIF
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB MISC:
+     »{CLEAR}*F¥{ENTER}«
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | SERVICE FEES"
+     DO YOU NEED TO OVERRIDE THE FEE? [@YES][@NO]
+     ENDWINDOW
+     IF [@BTN_PRSD]=[@YES]THEN
+W01_FEE_OVRDE:
+          WINDOW R=10 C=60 H="OVERRIDE FEE"
+          UPDATED FEE: [EXCH_FEE]
+           FEE REASON: [REASON]
+          ENDWINDOW
+          
+          DEFAULT [EXCH_FEE]=[EXCH_FEE]
+          DEFAULT [REASON]=[REASON]
+          
+          IF [EXCH_FEE]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER UPDATED FEE
+               ENDWINDOW
+               GOTO W01_FEE_OVRDE
+          ELSEIF [REASON]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER REASON
+               ENDWINDOW
+               GOTO W01_FEE_OVRDE
+          ENDIF
+          »5.S*UD40 [EXCH_FEE]{ENTER}«
+          »5H-SRVC FEE REASON-[REASON]{ENTER}«
+     ENDIF
+     
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | WAIVER/FAVORS"
+     DO YOU NEED TO ADD WAIVER/FAVORS? [@YES][@NO]
+     ENDWINDOW
+     IF[@BTN_PRSD]=[@YES]THEN SPAWN "#WAIVERFAVOR" ENDIF
+     
+W02_DOC:
+     »{CLEAR}*P5H{ENTER}«
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | DOCUMENTATION"
+     DO YOU NEED TO ADD DOCUMENTATION? [@YES][@NO]
+     ENDWINDOW
+     IF[@BTN_PRSD]=[@YES]THEN
+W03_AGT_RMKS:
+          [NEXT#D]="NEXT"
+          WINDOW R=10 C=60 H="AGENT REMARKS"
+             DOCUMENTATION: [REMARKS]
+          
+           REASON FOR EXCH: [REASON2]
+          WHAT WAS CHANGED? [CHANGED]
+              REQUESTED BY: [REQUEST]
+          
+           TRAVEL ARRANGER: [ARRANGER]
+          
+          [NEXT#D]
+          ENDWINDOW
+          
+          IF [NEXT#D]="BACK" THEN GOTO W02_DOC ENDIF
+          
+          DEFAULT [REMARKS]=[REMARKS]
+          DEFAULT [REASON2]=[REASON2]
+          DEFAULT [CHANGED]=[CHANGED]
+          DEFAULT [REQUEST]=[REQUEST]
+          DEFAULT [ARRANGER]=[ARRANGER]
+          
+          IF [REMARKS]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER DOCUMENTATION
+               ENDWINDOW
+               GOTO W03_AGT_RMKS
+          ELSEIF [REASON2]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER REASON FOR EXCHANGE
+               ENDWINDOW
+               GOTO W03_AGT_RMKS
+          ELSEIF [CHANGED]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER WHAT WAS CHANGED
+               ENDWINDOW
+               GOTO W03_AGT_RMKS
+          ELSEIF [REQUEST]="" THEN
+               WINDOW R=10 C=60 H="ERROR"
+               PLEASE ENTER REQUESTED BY
+               ENDWINDOW
+               GOTO W03_AGT_RMKS
+          ENDIF
+          
+          »5H-T¥RMK-EXCHANGE REASON [REASON2]§«
+          »5H-T¥RMK-CHANGED [CHANGED]§«
+          »5H-T¥RMK-CHANGE REQUESTED BY [REQUEST]§«
+          IF [ARRANGER]<>"" THEN »5H-TRAVEL ARRANGER WAS [ARRANGER]{ENTER}« ENDIF
+          IF [REMARKS]<>"" THEN »5H-[REMARKS]{ENTER}« ENDIF
+          
+          »5¥EXCHANGE REASON [REASON2]§«
+          »5¥CHANGED [CHANGED]§«
+          »5¥CHANGE REQUESTED BY [REQUEST]{ENTER}«
+     ENDIF
+     
+W04_FNL:
+     REQUIRE [DIN#C]="TRUE" FOR [SEGS]
+     DEFAULT [SUBJECT]="UPDATED ITIN/INVOICE FOR "+[LNAME]+"/"+[FNAME]
+     »{CLEAR}*IA*PAC{ENTER}«
+     WINDOW R=10 C=60 H="FINAL STEPS"
+     UPD SUBJECT LINE: [SUBJECT]
+     
+              DIN PNR: [DIN#C]    SEGMENTS: [SEGS] 1-3 OR 1/3
+       Q TO E-INVOICE: [INV#C]                       (optional)
+          
+                 
+           AGENT SINE: [ASINE]       QUEUE: [QUEUE]
+                 DATE: [DATE]
+     ENDWINDOW
+     
+     DEFAULT [SUBJECT]=[SUBJECT]
+     DEFAULT [SEGS]=[SEGS]
+     DEFAULT [DATE]=[DATE]
+     DEFAULT [ASINE]=[ASINE]
+     DEFAULT [QUEUE]=[QUEUE]
+     
+     IF [SUBJECT]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER SUBJECT LINE
+          ENDWINDOW
+          GOTO W04_FNL     
+     ELSEIF [DATE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER DATE
+          ENDWINDOW
+          GOTO W04_FNL
+     ELSEIF [ASINE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER AGENT SINE
+          ENDWINDOW
+          GOTO W04_FNL
+     ELSEIF [QUEUE]="" THEN
+          WINDOW R=10 C=30 H="ERROR"
+          PLEASE ENTER AGENT QUEUE
+          ENDWINDOW
+          GOTO W04_FNL
+     ELSEIF [QUEUE]<100 OR [QUEUE]>500 THEN
+          WINDOW R=10 C=30 H="ERROR"
+          PLEASE ENTER VALID AGENT QUEUE
+          ENDWINDOW
+          GOTO W04_FNL
+     ENDIF
+          
+     »{CLEAR}*P5H{ENTER}«
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | AGENT REMINDER"
+     ^R
+     REMEMBER TO DELETE THE ALREADY TICKETED LINE!
+        (YOU CAN PAUSE THE SCRIPT TO DO THIS)
+     
+     ENDWINDOW
+     
+     »{CLEAR}*¥{ENTER}«
+     WINDOW R=10 C=60 H=[@CURRENT_SCRIPT]+[SV]+" | EXISTING ITIN REMARKS"
+     EXISTING ITIN REMARKS ARE PRESENT..
+     WHAT LINE(S) TO DELETE? [DSEG] 5,7,9 OR 5-9
+     ENDWINDOW
+     IF[DSEG]+1 THEN »5[DSEG]¤{ENTER}« ENDIF
+     
+     IF [DK]="0171050000" THEN »{RESET}PE¥EXCHANGEDTICKETS@EAEAST.COM¥{ENTER}« ENDIF
+     IF [SUBJECT]<>"" THEN »5H-T¥SUBJECT-[SUBJECT]{ENTER}« ENDIF
+     »7TAW[DATE][QUEUE]/EXCH{ENTER}«
+     »{RESET}5H-EXCHANGE SCRIPT [@DATE][@TIME]{ENTER}«
+     »6[ASINE]§ER{ENTER}«
+     CALL SIMUL
+     
+     IF [DIN#C]="TRUE" THEN »DIN«
+          IF [SEGS]<>"" THEN »¥S[SEGS]« ENDIF
+          »¥R{ENTER}«
+     ENDIF
+     IF [INV#C]="TRUE" THEN
+          »QP/246/104¥247/136{ENTER}«
+          OPEN F="DELAY:2"
+          »{CLEAR}*[RECLOC]{ENTER}«
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB FOP:
+     »{CLEAR}*-{ENTER}«
+     READ F=[F] R=1 C=5 "-*"
+     IF [@SYSTEM_ERROR]=0 THEN
+          READ F=[E] R=3 C=7 [CC_CODE]
+          READ F=[E] R=3 C=9 [CC_NUM] 
+          DEFAULT [CC_CODE]=[CC_CODE]
+          DEFAULT [CC_NUM]=[CC_NUM] 
+     ENDIF
+ENDSUB
+
+;**********************************************
+
+SUB MSCLEAN:
+     REPEAT
+          »{CLEAR}*.{ENTER}«
+          READ F=[F] R=1 C=5 ".S*MS10"
+          IF [@SYSTEM_ERROR]=0 THEN
+               READ F=[E] R=[@DATA_ROW] C=12 [ANY1]
+               IF [ANY1]=[ACTG_LINE] THEN
+                    READ F=[E] R=[@DATA_ROW] C=1 [LINE]
+                    IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=2 [LINE] ENDIF
+                    IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=3 [LINE] ENDIF
+                    IF [LINE]<>"" THEN »5[LINE]¤{ENTER}« ENDIF
+                    CALL MSCLEAN
+               ENDIF
+          ENDIF
+          READ F=[F] R=1 C=5 ".S*LF"
+          IF [@SYSTEM_ERROR]=0 THEN
+               READ F=[E] R=[@DATA_ROW] C=1 [LINE]
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=2 [LINE] ENDIF
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=3 [LINE] ENDIF
+               IF [LINE]<>"" THEN »5[LINE]¤{ENTER}« ENDIF
+               CALL MSCLEAN
+          ENDIF
+          READ F=[F] R=1 C=5 ".S*FF"
+          IF [@SYSTEM_ERROR]=0 THEN
+               READ F=[E] R=[@DATA_ROW] C=1 [LINE]
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=2 [LINE] ENDIF
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=3 [LINE] ENDIF
+               IF [LINE]<>"" THEN »5[LINE]¤{ENTER}« ENDIF
+               CALL MSCLEAN
+          ENDIF
+          READ F=[F] R=1 C=5 ".S*FJ"
+          IF [@SYSTEM_ERROR]=0 THEN
+               READ F=[E] R=[@DATA_ROW] C=1 [LINE]
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=2 [LINE] ENDIF
+               IF [LINE]="" THEN READ F=[E] R=[@DATA_ROW] C=3 [LINE] ENDIF
+               IF [LINE]<>"" THEN »5[LINE]¤{ENTER}« ENDIF
+               CALL MSCLEAN
+          ENDIF
+     UNTIL [@SYSTEM_ERROR]=101
+ENDSUB
+
+;**********************************************
+
+SUB SIMUL:
+     READ F=[F] R=1 C=1 "SIMULTANEOUS CHANGES TO PNR"
+     IF [@SYSTEM_ERROR]=0 THEN
+          WINDOW R=10 C=35 H=[@CURRENT_SCRIPT]+[SV]+" | Simultaneous Change"
+          ^R
+                     SIMULTANEOUS CHANGES TO PNR!!
+          Press <ENTER> to ignore record and restart script.
+          ENDWINDOW
+          »{RESET}IR{ENTER}«
+          SPAWN #EXCHANGE
+          EXIT
+     ENDIF
+ENDSUB
+
+;**********************************************

@@ -1,0 +1,80 @@
+     »{CLEAR}*IA{ENTER}«
+     MENU R=10 C=55 H=[@CURRENT_SCRIPT]+[SV]+" | Type"
+     "SOUTHWEST"
+          CALL SOUTHWEST
+     "OTHER"
+          CALL OTHER
+     ENDMENU
+     »{CLEAR}*I*PAC{ENTER}«
+     EXIT
+
+;**********************************************
+
+SUB SOUTHWEST:
+     WINDOW R=10 C=50 H=[@CURRENT_SCRIPT]+[SV]+" | Early Bird Check-In"
+     WHAT SEGMENT HAS EARLY BIRD CHECKIN? [SEG]
+     ENDWINDOW
+
+W01_WN:   
+     »{CLEAR}*I[SEG]{ENTER}«
+     [AC#D]="WN" REQUIRE 0=1 FOR [AC#D]
+     READ F=[E] R=2 C=12 [DDATE]
+     READ F=[E] R=2 C=20 [DCITY]
+     READ F=[E] R=2 C=54 [CONF]
+     DEFAULT [DDATE]=[DDATE]
+     DEFAULT [DCITY]=[DCITY]
+     DEFAULT [CONF]=[CONF]
+     
+     IF [AC#D]="WN" THEN [TYPE#D]="EARLY BIRD" ENDIF
+     IF [AC#D]="UA" THEN [TYPE#D]="CHOICE" ENDIF
+     WINDOW R=10 C=55 H=[@CURRENT_SCRIPT]+[SV]+" | Pricing"
+         SEAT PRICE: [PRICE]
+     DEPARTURE DATE: [DDATE]     CITY: [DCITY]
+            AIRLINE: [AC#D]  
+       CONFIRMATION: [CONF]
+            
+     [NEXT#D]
+     ENDWINDOW
+     
+     DEFAULT [PRICE]=[PRICE]
+     DEFAULT [DDATE]=[DDATE]
+     DEFAULT [DCITY]=[DCITY]
+     DEFAULT [CONF]=[CONF]
+     
+     IF [NEXT#D]="BACK" THEN GOTO M01_MAIN ENDIF
+     
+     IF [PRICE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER SEAT PRICE
+          ENDWINDOW
+          GOTO W01_WN
+     ELSEIF [DDATE]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER DEPARTURE DATE
+          ENDWINDOW
+          GOTO W01_WN
+     ELSEIF [DCITY]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER DEPARTURE CITY
+          ENDWINDOW
+          GOTO W01_WN
+     ELSEIF [CONF]="" THEN
+          WINDOW R=10 C=60 H="ERROR"
+          PLEASE ENTER CONFIRMATION
+          ENDWINDOW
+          GOTO W01_WN
+     ENDIF
+     
+     [SEGMENT]=[SEG]-1
+     »{CLEAR}/[SEGMENT]/0OTHWNGK1[DCITY][DDATE]-EARLYBIRD CHECKIN SEAT CONFIRMED [PRICE] PER PERSON{ENTER}«
+     
+     CALL ACTG_INFO
+     [SEGS]=[SEGMENT]+1
+     »ACOTH[SEGS]/WNWNWN/XSC/0/[PRICE]/0/ONE/«    
+     IF $[CC_NUM]>=15 THEN »CC[CC_TYPE][CC_NUM]«
+     ELSE »CK«
+     ENDIF
+     » 1.1[LNAME] [FNAME]/1-*SG*TT13*FJAF*CF[CONF]{ENTER}«
+ENDSUB
+
+;**********************************************
