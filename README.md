@@ -1,2 +1,2 @@
 # scribe
-Sabre Scribe Scripts
+Sabre Scripts written in the Scribe programming language.
