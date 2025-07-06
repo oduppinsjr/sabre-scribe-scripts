@@ -1,0 +1,192 @@
+;**********************************************
+
+SUB WNACTG:
+     IF ([ACTG_ADDED]="" OR [ACTG_ADDED]="N") AND ([MSL_ADDED]="" OR [MSL_ADDED]="N") THEN CALL delACLINES ENDIF
+     IF [OLD_TKT_NUM1]="" AND [OLD_TKT_AMT1]="" THEN REQUIRE 0=1 FOR [OLD_TKT_AMT1] ENDIF
+     IF [OLD_TKT_NUM2]="" AND [OLD_TKT_AMT2]="" THEN REQUIRE 0=1 FOR [OLD_TKT_AMT2] ENDIF
+     
+WNAC:
+     [NEXT#D]="NEXT"
+     IF [EXCH_TYPE]="ADD COLLECT" THEN
+          [ADD_COL]=([NEW_TKT_AMT]-([OLD_TKT_AMT]+[OLD_TKT_AMT1]+[OLD_TKT_AMT2])+[EXCH_FEE])-[MISC_CHG] DEFAULT [ADD_COL]=[ADD_COL]
+          WINDOW R=10 C=35 H=[@CURRENT_SCRIPT]+[SV]+" | Add Collect Verification"
+          ^          ^*                   ^
+          Calculated ADDITIONAL COLLECTION is below:
+          ^R*
+           **Please verify ALL VALUES are correct**
+          -------------------------------------------
+                    New Ticket....$[NEW_TKT_AMT]
+               Ticket/Credit#1....$[OLD_TKT_AMT]
+               Ticket/Credit#2....$[OLD_TKT_AMT1]
+               Ticket/Credit#3....$[OLD_TKT_AMT2] 
+                  Exchange Fee....$[EXCH_FEE]
+                 Misc. Charges....$[MISC_CHG]
+                                   _________
+          ^*
+             calc. Add Collect....$[ADD_COL]
+          
+          [NEXT#D]
+          ENDWINDOW
+          IF [NEXT#D]="BACK" OR [ADD_COL]<=0 THEN 
+               IF [ADD_COL]<=0 THEN
+                    WINDOW R=10 C=35 H="ERROR::"+[ADD_COL]
+                    ** ADDITIONAL COLLECTION MUST BE GREATER THAN ZERO **
+                    ENDWINDOW
+               ENDIF
+               IF [OLD_TKT_NUM2]<>"" THEN GOTO W03_NA_EXCH
+               ELSEIF [OLD_TKT_NUM1]<>"" THEN 
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                    GOTO W02_NA_EXCH
+               ELSE
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT1]
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                    GOTO W01_NA_EXCH
+               ENDIF
+          ENDIF
+      
+          »{CLEAR}AC/[AC#D]/[NEW_TKT_NUM]/0/[ADD_COL]/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_VEN][CC_NUM]« ENDIF
+               » [PAX#D]/1/D/E-V-[AC#D][AC#D][AC#D]-«
+               »*VC[AC#D][AC#D][AC#D]«
+               »*SBSUP*TT19*SG{ENTER}« CALL SIMUL
+          CALL ACCHECK IF [NNAC]="Y" THEN GOTO WNAC ENDIF ;verify accounting line was successfully added
+          CALL FARE_SAVINGS
+          »{CLEAR}5« IF [CALLING_SCRIPT]="&AFTERHOURS" AND [DK]<>"0171410000" AND [DK]<>"0173180000" AND [DK]<>"0173170000" AND [DK]<>"0173910039" THEN »H-« ELSE ».« ENDIF
+          »S*MS1« IF [ACTG_LINE]<10 THEN »0« ENDIF »[ACTG_LINE]*OT[OLD_TKT_NUM]*CF[NEW_TKT_NUM]*EXA{ENTER}« CALL SIMUL [MSL_ADDED]="Y"
+     ELSEIF [EXCH_TYPE]="EVEN" OR [EXCH_TYPE]="RESIDUAL" THEN
+          IF [EXCH_TYPE]="EVEN" THEN
+               IF [NEW_TKT_AMT]<>([OLD_TKT_AMT]+[OLD_TKT_AMT1]+[OLD_TKT_AMT2]) THEN
+                    WINDOW R=10 C=35 H="ERROR::"+[NEW_TKT_AMT]+":"+[OLD_TKT_AMT]
+                    ** TICKET AMOUNTS MUST BE EQUAL FOR EVEN EXCHANGE **
+                    ENDWINDOW
+                    IF [OLD_TKT_NUM2]<>"" THEN GOTO W03_NA_EXCH
+                    ELSEIF [OLD_TKT_NUM1]<>"" THEN 
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                         GOTO W02_NA_EXCH
+                    ELSE
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT1]
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                         GOTO W01_NA_EXCH 
+                    ENDIF
+               ENDIF
+          ELSEIF [EXCH_TYPE]="RESIDUAL" THEN
+               ;[RESID]=[OLD_TKT_AMT]-[NEW_TKT_AMT]+[EXCH_FEE]
+               [RESID]=(([OLD_TKT_AMT]+[OLD_TKT_AMT1]+[OLD_TKT_AMT2])-[NEW_TKT_AMT])-[MISC_CHG] 
+               IF [AC#D]<>"AA" AND [AC#D]<>"DL" AND [AC#D]<>"AS" THEN [RESID]=[RESID]+[EXCH_FEE] ENDIF 
+               DEFAULT [RESID]=[RESID]
+               WINDOW R=10 C=35 H=[@CURRENT_SCRIPT]+[SV]+" | Residual Verification"
+               ^               ^*      ^
+                    Calculated RESIDUAL is below..
+               ^R*
+                **Please verify ALL VALUES are correct**
+               -------------------------------------------
+                         New Ticket....$[NEW_TKT_AMT]
+                    Ticket/Credit#1....$[OLD_TKT_AMT]
+                    Ticket/Credit#2....$[OLD_TKT_AMT1]
+                    Ticket/Credit#3....$[OLD_TKT_AMT2] 
+                       Exchange Fee....$[EXCH_FEE]
+                      Misc. Charges....$[MISC_CHG]
+                                        _________
+               ^*
+                     calc. Residual....$[RESID]
+                              
+               [NEXT#D]
+               ENDWINDOW
+               IF [NEXT#D]="BACK" OR [RESID]<=0 THEN
+                    IF [RESID]<=0 THEN
+                         WINDOW R=10 C=35 H="ERROR::"+[RESID]
+                         ** RESIDUAL MUST BE GREATER THAN ZERO **
+                         ENDWINDOW
+                    ENDIF
+                    IF [OLD_TKT_NUM2]<>"" THEN GOTO W03_NA_EXCH
+                    ELSEIF [OLD_TKT_NUM1]<>"" THEN 
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                         GOTO W02_NA_EXCH
+                    ELSE
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT1]
+                         REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                         GOTO W01_NA_EXCH 
+                    ENDIF
+               ENDIF
+          ENDIF
+          
+          »{CLEAR}AC/[AC#D]/[NEW_TKT_NUM]/0/0.00/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_VEN][CC_NUM]« ENDIF
+               » [PAX#D]/1/D/E-V-[AC#D][AC#D][AC#D]-«
+               »*VC[AC#D][AC#D][AC#D]«
+               »*SBSUP*TT19*SG{ENTER}« CALL SIMUL
+          CALL ACCHECK IF [NNAC]="Y" THEN GOTO WNAC ENDIF ;verify accounting line was successfully added
+          CALL FARE_SAVINGS
+          »{CLEAR}5« IF [CALLING_SCRIPT]="&AFTERHOURS" AND [DK]<>"0171410000" AND [DK]<>"0173180000" AND [DK]<>"0173170000" AND [DK]<>"0173910039" THEN »H-« ELSE ».« ENDIF
+          »S*MS1« IF [ACTG_LINE]<10 THEN »0« ENDIF »[ACTG_LINE]*OT[OLD_TKT_NUM]*CF[NEW_TKT_NUM]*EXE{ENTER}« CALL SIMUL [MSL_ADDED]="Y"
+          IF [EXCH_TYPE]="RESIDUAL" THEN
+               IF [FOP#D]="CA" THEN »{CLEAR}5H-T¥INVR-PAID IN FULL BY CASH ON [@DATE]{ENTER}«
+               ELSE »5H-PAID IN FULL{ENTER}« ENDIF ;show balance paid on invoice 
+               ;»6[AGT]§ER{ENTER}«
+               ;»{CLEAR}QP/1P3F304/054*[RECLOC]{ENTER}«
+               ;READ F=[F] R=1 C=1 "QUEUE PLACEMENT COMPLETED"
+               ;IF [@SYSTEM_ERROR]=101 THEN
+               ;     WINDOW R=10 C=35 H=[@CURRENT_SCRIPT]+[SV]+" | ERROR:"+[@SYSTEM_ERROR]
+               ;     ^R       ^*
+               ;     WARNING: FAILURE TO QUEUE PLACE PNR!!
+               ;     ENDWINDOW
+               ;ENDIF
+          ENDIF
+     ELSEIF [EXCH_TYPE]="REFUND" THEN
+          [RFD]=(([OLD_TKT_AMT]+[OLD_TKT_AMT1]+[OLD_TKT_AMT2])-([NEW_TKT_AMT]+[EXCH_FEE]))-[MISC_CHG] DEFAULT [RFD]=[RFD]
+          WINDOW R=10 C=35 H=[@CURRENT_SCRIPT]+[SV]+" | Refund Verification"
+          ^                  ^*    ^
+                  Calculated REFUND is below..
+          ^R*
+           **Please verify ALL VALUES are correct**
+          -------------------------------------------
+                    New Ticket....$[NEW_TKT_AMT]
+               Ticket/Credit#1....$[OLD_TKT_AMT]
+               Ticket/Credit#2....$[OLD_TKT_AMT1]
+               Ticket/Credit#3....$[OLD_TKT_AMT2] 
+                  Exchange Fee....$[EXCH_FEE]
+                 Misc. Charges....$[MISC_CHG]
+                                   _________
+          ^*
+                 calc. Refund.....$[RFD]
+          
+          [NEXT#D]
+          ENDWINDOW
+          IF [NEXT#D]="BACK" OR [RFD]<=0 THEN 
+               IF [RFD]<=0 THEN
+                    WINDOW R=10 C=35 H="ERROR::"+[RFD]
+                    ** REFUND MUST BE GREATER THAN ZERO **
+                    ENDWINDOW
+               ENDIF
+               IF [OLD_TKT_NUM2]<>"" THEN GOTO W03_NA_EXCH
+               ELSEIF [OLD_TKT_NUM1]<>"" THEN 
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                    GOTO W02_NA_EXCH
+               ELSE
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT1]
+                    REQUIRE 1=1 FOR [OLD_TKT_AMT2]
+                    GOTO W01_NA_EXCH 
+               ENDIF
+          ENDIF
+          
+          ;ac line for even exchange using new ticket
+          »{CLEAR}AC/[AC#D]/[NEW_TKT_NUM]/0/0.00/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_VEN][CC_NUM]« ENDIF
+               » [PAX#D]/1/D/E-V-[AC#D][AC#D][AC#D]-«
+               »*VC[AC#D][AC#D][AC#D]«
+               »*SBSUP*TT19*SG{ENTER}« CALL SIMUL
+          CALL ACCHECK IF [NNAC]="Y" THEN GOTO WNAC ENDIF ;verify accounting line was successfully added
+          [FJ]="E" CALL FARE_SAVINGS
+          »{CLEAR}5« IF [CALLING_SCRIPT]="&AFTERHOURS" AND [DK]<>"0171410000" AND [DK]<>"0173180000" AND [DK]<>"0173170000" AND [DK]<>"0173910039" THEN »H-« ELSE ».« ENDIF
+          »S*MS1« IF [ACTG_LINE]<10 THEN »0« ENDIF »[ACTG_LINE]*OT[OLD_TKT_NUM]*CF[NEW_TKT_NUM]*EXR{ENTER}« CALL SIMUL [MSL_ADDED]="Y"
+          
+          ;ac line for refund using old ticket
+          »{CLEAR}ACR/[AC#D]/[OLD_TKT_NUM]/0/[RFD]/0.00/ONE/[FOP#D]«
+               IF [FOP#D]="CC" THEN »[CC_VEN][CC_NUM]« ENDIF
+               » [PAX#D]/1/A/[IND#D]/D/E-V-[AC#D][AC#D][AC#D]-«
+               »*VC[AC#D][AC#D][AC#D]«
+               »*SBSUP*TT19*SG{ENTER}« CALL SIMUL
+          CALL ACCHECK IF [NNAC]="Y" THEN GOTO WNAC ENDIF ;verify accounting line was successfully added
+          ;[FJ]="R" CALL FARE_SAVINGS ;grasp prepare will handle this per janice
+     ENDIF
+ENDSUB

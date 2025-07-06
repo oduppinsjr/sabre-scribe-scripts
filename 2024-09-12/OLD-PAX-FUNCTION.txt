@@ -1,0 +1,158 @@
+SUB PAX:
+     ;[FILE]="C:/SABRE/APPS/SCRIBE/"+[@CURRENT_SCRIPT]+[RECLOC]+[AGT]+[@DATE]+".TXT"
+     [FILE]="${plugin_resources}/scripts/resources/"+[@CURRENT_SCRIPT]+[RECLOC]+[AGT]+[@DATE]+".TXT"
+     [R]=1
+     WRITE F=[S] R=1 C=1 "TN"
+     READ F=[S] R=1 C=1 [ERROR]
+     IF [ERROR]<>"NO NAMES" THEN
+          READ F=[S] R=[R] C=1 [ANY12]
+          IF [ANY12]="NBR IN PARTY" THEN
+               READ F=[S] R=[R] C=16 [PAX_COUNT]
+               [R]=[R]+1
+          ENDIF
+          READ F=[S] R=[R] C=1 [ANY12]
+          IF [ANY12]="PLUS INFANTS" THEN
+               READ F=[S] R=[R] C=16 [INF_COUNT]
+               [PAX_COUNT]=[PAX_COUNT]+[INF_COUNT] DEFAULT [PAX_COUNT]=[PAX_COUNT]
+               [R]=[R]+1
+          ENDIF
+          [ROW]=[R]
+          [N]=0
+          REPEAT
+               READ F=[S] R=[R] C=1 [PAX_NUM1]
+               IF [PAX_NUM1]="" THEN READ F=[S] R=[R] C=2 [PAX_NUM1] ENDIF
+               READ F=[S] R=[R] C=5 [PAX_NUM2]
+               [C]=1
+               [P]=[PAX_NUM2]
+               REPEAT
+                    READ F=[S] R=[R] C=5 [PAX_NUM2]
+                    IF [C]=5 THEN
+                         IF [PAX_NUM2]>5 THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR],"/"
+                         ELSE
+                              READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME]," ",[PAX_MNAME],"*",[PAX_NFR]," "
+                              IF [PAX_MNAME]="" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR]," " ENDIF
+                         ENDIF
+                         READ F=[S] R=[R] C=6 [ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_INIT]
+                         IF [PAX_NUM2]<>"" AND [PAX_NUM2]<>[C] THEN [PAX_NUM2]=[C] ENDIF
+                    ELSEIF [C]=4 THEN
+                         IF [PAX_NUM2]>4 THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR],"/"
+                         ELSE
+                              READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME]," ",[PAX_MNAME],"*",[PAX_NFR]," "
+                              IF [PAX_MNAME]="" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR]," " ENDIF
+                         ENDIF
+                         READ F=[S] R=[R] C=6 [ANY30],"/",[ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_INIT]
+                         IF [PAX_NUM2]<>"" AND [PAX_NUM2]<>[C] THEN [PAX_NUM2]=[C] ENDIF
+                    ELSEIF [C]=3 THEN
+                         IF [PAX_NUM2]>3 THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR],"/"
+                         ELSE
+                              READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME]," ",[PAX_MNAME],"*",[PAX_NFR]," "
+                              IF [PAX_MNAME]="" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR]," " ENDIF
+                         ENDIF
+                         READ F=[S] R=[R] C=6 [ANY30],"/",[ANY30],"/",[ANY30],"/",[PAX_INIT]
+                         IF [PAX_NUM2]<>"" AND [PAX_NUM2]<>[C] THEN [PAX_NUM2]=[C] ENDIF
+                    ELSEIF [C]=2 THEN
+                         IF [PAX_NUM2]>2 THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR],"/"
+                         ELSE
+                              READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[PAX_FNAME]," ",[PAX_MNAME],"*",[PAX_NFR]," "
+                              IF [PAX_MNAME]="" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[ANY30],"/",[PAX_FNAME],"*",[PAX_NFR]," " ENDIF
+                         ENDIF
+                         READ F=[S] R=[R] C=6 [ANY30],"/",[ANY30],"/",[PAX_INIT]
+                         IF [PAX_NUM2]<>"" AND [PAX_NUM2]<>[C] THEN [PAX_NUM2]=[C] ENDIF
+                    ELSEIF [C]=1 THEN
+                         IF [PAX_NUM2]>1 THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_FNAME],"*",[PAX_NFR],"/"
+                         ELSE
+                              READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_FNAME]," ",[PAX_MNAME],"*",[PAX_NFR]," " ;capture middle name if present, else overwrite with second read statement
+                              IF [PAX_MNAME]="" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_FNAME],"*",[PAX_NFR]," " ENDIF ;read again to make sure we didn't put the nfr into pax_fname
+                         ENDIF
+                         READ F=[S] R=[R] C=6 [ANY30],"/",[PAX_INIT]
+                         IF [PAX_NUM2]<>[C] THEN [PAX_NUM2]=[C] ENDIF
+                    ENDIF
+                    ;READ F=[S] R=[R] C=2 [PAX_NUM1]
+                    ;READ F=[S] R=[R] C=5 [PAX_NUM2]
+                    ;READ F=[S] R=[R] C=6 [PAX_NAME],"*",[PAX_NFR]
+                    ;IF [PAX_NFR]<>"" THEN READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_FNAME],"*"
+                    ;ELSE READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_FNAME]," " ENDIF
+                    ;READ F=[S] R=[R] C=6 [PAX_LNAME],"/",[PAX_INIT]
+                    ;IF [PAX_NUM1]<>"" AND [PAX_NUM2]<>"" AND [PAX_NAME]<>"" THEN
+                         [PAX_NAME]=[PAX_LNAME]+"/"+[PAX_FNAME]+" "+[PAX_MNAME]
+                         IF [DEBUG]="P" THEN
+                              DEFAULT [PAX_COUNT]=[PAX_COUNT]
+                              DEFAULT [PAX_NUM1]=[PAX_NUM1] DEFAULT [PAX_NUM2]=[PAX_NUM2]
+                              DEFAULT [PAX_NAME]=[PAX_NAME] DEFAULT [PAX_FNAME]=[PAX_FNAME]
+                              DEFAULT [PAX_MNAME]=[PAX_MNAME] DEFAULT [PAX_LNAME]=[PAX_LNAME]
+                              DEFAULT [PAX_NFR]=[PAX_NFR] DEFAULT [PAX_INIT]=[PAX_INIT]
+                              WINDOW R=10 C=35 H="DEBUG:"+[N]
+                              PAX_COUNT: [PAX_COUNT]
+                                PAX_NUM: [PAX_NUM1].[PAX_NUM2]
+                               PAX_NAME: [PAX_NAME]
+                              PAX_LNAME: [PAX_LNAME]
+                              PAX_FNAME: [PAX_FNAME]
+                              PAX_MNAME: [PAX_MNAME]
+                               PAX_INIT: [PAX_INIT]
+                                PAX_NFR: [PAX_NFR]
+                              ENDWINDOW
+                         ENDIF
+                         ;[PAX]=[PAX_NAME] ;start with passenger name
+                         ;;IF [PAX_NFR]<>"" THEN [PAX]=[PAX]+"*"+[PAX_NFR] ENDIF ;append name field remarks
+                         ;[PAX]=[PAX]+"="+[PAX_NUM1]+"."+[PAX_NUM2]+[PAX_LNAME]
+                         ;IF $[PAX_LNAME]>10 THEN [PAX]=[PAX]+" "+[PAX_INIT] ;end with value
+                         ;ELSE [PAX]=[PAX]+" "+[PAX_FNAME] ENDIF
+                         ;[PAX#D]=[PAX#D]+[PAX]+"|" ;add new passenger to list
+                         ;WRITE F=[FILE] R=[R] C=1 [PAX]
+                         ;[PAX]=""
+                         ;[N]=[N]+1
+                         ;[R]=[R]+1
+                    ;ELSEIF [R]>20 THEN
+                    ;     WRITE F=[S] R=1 C=1 "MD"
+                    ;     [R]=1
+                    ;ELSE
+                    ;     SPAWN "+GET-ERROR"
+                    ;     ;WINDOW R=10 C=35 H="UNHANDLED ERROR::"+[R]
+                    ;     ;UNHANDLED ERROR: CONTACT SUPPORT FOR ASSISTANCE
+                    ;     ;ENDWINDOW
+                    ;     EXIT
+                    ;ENDIF
+                    IF [PAX_NUM1]<>"" AND [PAX_LNAME]<>"" THEN
+                         ;IF ([PAX_NUM1]+[PAX_NUM2])-1=[N] THEN ;log passengers in numerical order
+                              IF [PAX1]="" THEN [PAX1]=[PAX_NUM1] ENDIF
+                              [PAX]=[PAX_NAME] ;start with passenger name
+                              ;IF [PAX_NFR]<>"" THEN [PAX]=[PAX]+"*"+[PAX_NFR] ENDIF ;append name field remarks
+                              WRITE F=[FILE] R=[N] C=1 [PAX]+"\r\n" ;write new passenger to file
+                              [PAX]=""
+                              [PAX]=[PAX_NAME] ;start with passenger name
+                              ;IF [PAX_NFR]<>"" THEN [PAX]=[PAX]+"*"+[PAX_NFR] ENDIF ;append name field remarks
+                              ;[PAX]=[PAX]+"="+[PAX_NAME] ;end with value
+                              IF $[PAX_LNAME]>10 THEN [PAX]=[PAX]+"="+[PAX_NUM1]+"."+[PAX_NUM2]+[PAX_LNAME]+" "+[PAX_INIT] ;end with value
+                              ELSE [PAX]=[PAX]+"="+[PAX_NUM1]+"."+[PAX_NUM2]+[PAX_LNAME]+" "+[PAX_FNAME] ENDIF
+                              [PAX#D]=[PAX#D]+[PAX]+"|" ;add new passenger to list
+                              [PAX]=""
+                              [N]=[N]+1
+                         ;ENDIF
+                         IF [C]>=[P] THEN [R]=[R]+1 ENDIF
+                         IF [R]>=([PAX_COUNT]+[ROW]) THEN
+                              IF [PAX_COUNT]<20 THEN ;all passengers should be on one page
+                                   IF [N]=1 THEN [N]=[N]+1 ENDIF ;didn't find passenger number - skip and move to the next number
+                                   [R]=[ROW] ;return to top of list
+                              ELSE ;passenger count >20 nn move down
+                                   WRITE F=[S] R=1 C=1 "MD" ;move down list
+                                   [R]=[ROW] ;return to top of list
+                              ENDIF
+                         ENDIF
+                    ELSEIF [N]<>[PAX_COUNT] THEN
+                         [R]=[ROW] ;start over at the top incase ordering is not as expected
+                         IF [ERR_COUNT]>5 THEN ;error loop catch
+                             SPAWN "+GET-ERROR"
+                             WINDOW R=10 C=35 H="UNHANDLED ERROR::"+[R]+":"+[C]+":"+[PAX_NUM1]+":"+[PAX_NUM2]+":"+[PAX_NAME]
+                             UNHANDLED ERROR: CONTACT SUPPORT FOR ASSISTANCE
+                             ENDWINDOW
+                         ENDIF
+                    ENDIF
+                    [C]=[C]+1
+               UNTIL [C]>[P]
+          UNTIL [N]>=[PAX_COUNT]
+          [PAX#D]=[PAX#D]+"________________________________________________=NN|" ;add spacer for equal/standard size
+          DEFAULT [PAX#D]=[PAX#D]
+     ELSE
+          DEFAULT [PAX#D]="NO PASSENGERS=NA"
+     ENDIF
+ENDSUB
